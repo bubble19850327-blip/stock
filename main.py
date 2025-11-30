@@ -79,7 +79,7 @@ def analyze_strategy(ticker):
             f"\n\n📊 【{ticker} 策略報告】"
             f"\n現價: {price:.2f}"
             f"\n乖離: {bias:.2f}%"
-            f"\n均線: 季 {ma60:.0f} / 半 {ma120:.0f}"
+            f"\n均線: 月 {ma20:.0f} / 季 {ma60:.0f} / 半 {ma120:.0f}"
             f"\n------------------"
             f"\n💡 建議: {icon} {action}"
             f"\n📝 理由: {reason}"
@@ -97,3 +97,4 @@ if __name__ == "__main__":
     
     # 發送結果
     send_push(full_report)
+
