@@ -1,72 +1,99 @@
 import os
-import yfinance as yf
 import requests
+import yfinance as yf
 from datetime import datetime
 
-# 從 GitHub Secrets 讀取 Token
-LINE_TOKEN = os.environ.get("LINE_TOKEN")
-tickers = ['00631L.TW', '00675L.TW']
+# 1. 讀取 GitHub Secrets (必須與 Repo 設定一致)
+CHANNEL_TOKEN = os.environ.get('LINE_CHANNEL_TOKEN')
+USER_ID = os.environ.get('LINE_USER_ID')
+TICKERS = ['00631L.TW', '00675L.TW']
 
 def send_push(msg):
-    headers = {"Authorization": f"Bearer {os.environ['LINE_TOKEN']}", "Content-Type": "application/json"}
-    requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json={
-        "to": os.environ['LINE_USER_ID'], "messages": [{"type": "text", "text": msg}]
-    })
+    """透過 LINE Messaging API 發送推播訊息"""
+    if not CHANNEL_TOKEN or not USER_ID:
+        print("❌ 錯誤：未讀取到 Token 或 User ID")
+        return
 
-def send_line_notify(token, msg):
     headers = {
-        "Authorization": "Bearer " + token,
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Authorization": f"Bearer {CHANNEL_TOKEN}",
+        "Content-Type": "application/json"
     }
-    requests.post("https://notify-api.line.me/api/notify", headers=headers, data={'message': msg})
+    body = {
+        "to": USER_ID,
+        "messages": [{"type": "text", "text": msg}]
+    }
+    
+    # 呼叫 LINE Push API
+    try:
+        r = requests.post("https://api.line.me/v2/bot/message/push", headers=headers, json=body)
+        r.raise_for_status()
+        print("✅ LINE 通知已發送")
+    except Exception as e:
+        print(f"❌ 發送失敗: {e}")
 
 def analyze_strategy(ticker):
-    # 抓取足夠資料以計算半年線 (120MA)
-    df = yf.Ticker(ticker).history(period="1y")
+    """分析個股策略邏輯"""
+    try:
+        # 抓取 1 年數據以計算半年線
+        df = yf.Ticker(ticker).history(period="1y")
+        if len(df) < 120: return f"\n⚠️ {ticker} 數據不足 (需 > 120 天)"
+
+        price = df['Close'].iloc[-1]
+        ma20 = df['Close'].rolling(20).mean().iloc[-1]   # 月線 (防守)
+        ma60 = df['Close'].rolling(60).mean().iloc[-1]   # 季線 (買點1)
+        ma120 = df['Close'].rolling(120).mean().iloc[-1] # 半年線 (買點2)
+        bias = ((price - ma60) / ma60) * 100             # 季線乖離率
+
+        # 初始化訊號
+        action = "觀望 / 續抱 (Hold)"
+        icon = "👀"
+        reason = "未觸發特定訊號"
+
+        # === 核心策略邏輯 (優先順序：大跌買進 > 跌破防守 > 過熱停利) ===
+        if price < ma120:
+            action = "🔥 重擊加碼 (Buy 20%)"
+            icon = "🟢🟢"
+            reason = f"跌破半年線 {ma120:.1f}，進入超跌區"
+        elif price < ma60:
+            action = "✨ 試單加碼 (Buy 10%)"
+            icon = "🟢"
+            reason = f"跌破季線 {ma60:.1f}，進入價值區"
+        elif price < ma20:
+            action = "🛡️ 獲利了結 (Sell 1/3)"
+            icon = "🔴"
+            reason = f"跌破月線 {ma20:.1f}，短線轉弱"
+        elif bias > 25:
+            action = "🚀 網格停利 3 (Sell 10%)"
+            icon = "💰💰"
+            reason = f"乖離過熱 > 25% (目前 {bias:.1f}%)"
+        elif bias > 20:
+            action = "🚀 網格停利 2 (Sell 10%)"
+            icon = "💰"
+            reason = f"乖離擴大 > 20% (目前 {bias:.1f}%)"
+        elif bias > 15:
+            action = "🚀 網格停利 1 (Sell 10%)"
+            icon = "🟠"
+            reason = f"乖離起漲 > 15% (目前 {bias:.1f}%)"
+
+        return (
+            f"\n\n📊 【{ticker} 策略報告】"
+            f"\n現價: {price:.2f}"
+            f"\n乖離: {bias:.2f}%"
+            f"\n均線: 季 {ma60:.0f} / 半 {ma120:.0f}"
+            f"\n------------------"
+            f"\n💡 建議: {icon} {action}"
+            f"\n📝 理由: {reason}"
+        )
+    except Exception as e:
+        return f"\n⚠️ {ticker} 分析錯誤: {e}"
+
+# === 主程式執行區 ===
+if __name__ == "__main__":
+    print("🚀 開始執行策略分析...")
+    full_report = f"📅 {datetime.now().strftime('%Y-%m-%d')} 投資雷達"
     
-    if len(df) < 120: return f"\n⚠️ {ticker} 數據不足"
-
-    price = df['Close'].iloc[-1]
-    ma20 = df['Close'].rolling(20).mean().iloc[-1]   # 月線 (防守線)
-    ma60 = df['Close'].rolling(60).mean().iloc[-1]   # 季線 (價值線)
-    ma120 = df['Close'].rolling(120).mean().iloc[-1] # 半年線 (重壓線)
-    bias = ((price - ma60) / ma60) * 100             # 季線乖離率
-
-    action, icon, reason = "觀望 / 續抱", "👀", "無觸發訊號"
-
-    # === 策略邏輯核心 (優先順序：買進 > 停損 > 網格停利) ===
-    if price < ma120:
-        action, icon = "大舉加碼 (Buy 20%)", "🟢🟢"
-        reason = "跌破半年線，進入超跌區 (金字塔底部)"
-    elif price < ma60:
-        action, icon = "試單加碼 (Buy 10%)", "🟢"
-        reason = "跌破季線，進入價值區 (金字塔中部)"
-    elif price < ma20:
-        action, icon = "趨勢轉弱 (Sell 1/3)", "🛡️"
-        reason = "跌破月線，獲利防守"
-    elif bias > 25:
-        action, icon = "網格停利 3 (Sell 10%)", "🔴🔴"
-        reason = f"乖離過熱 > 25% ({bias:.1f}%)"
-    elif bias > 20:
-        action, icon = "網格停利 2 (Sell 10%)", "🔴"
-        reason = f"乖離擴大 > 20% ({bias:.1f}%)"
-    elif bias > 15:
-        action, icon = "網格停利 1 (Sell 10%)", "🟠"
-        reason = f"乖離起漲 > 15% ({bias:.1f}%)"
-
-    return (
-        f"\n\n📊 【{ticker} 策略日報】"
-        f"\n現價: {price:.2f} / 乖離: {bias:.1f}%"
-        f"\n關鍵均線: 月{ma20:.0f} / 季{ma60:.0f} / 半{ma120:.0f}"
-        f"\n💡 建議: {icon} {action}"
-        f"\n📝 理由: {reason}"
-    )
-
-if LINE_TOKEN:
-    report = f"\n📅 {datetime.now().strftime('%Y-%m-%d')} 投資雷達"
-    for t in tickers:
-        try: report += analyze_strategy(t)
-        except Exception as e: report += f"\n⚠️ {t} 錯誤: {e}"
-    send_line_notify(LINE_TOKEN, report)
-else:
-    print("❌ 請設定 LINE_TOKEN 環境變數")
+    for t in TICKERS:
+        full_report += analyze_strategy(t)
+    
+    # 發送結果
+    send_push(full_report)
