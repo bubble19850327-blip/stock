@@ -1,0 +1,22 @@
+name: 每日股價策略
+on:
+  schedule:
+    - cron: '30 7 * * 1-5'  # UTC 07:30 = 台灣時間 15:30 (週一至週五)
+  workflow_dispatch:      # 允許手動按鈕觸發測試
+
+jobs:
+  run-strategy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+      - name: 執行策略
+        env:
+          # 將 GitHub 密鑰注入到 Python 環境變數
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py
