@@ -5,13 +5,12 @@ import pandas_ta as ta
 from datetime import datetime
 
 # === 設定區 ===
-# 從 GitHub Secrets 讀取 Token
 CHANNEL_TOKEN = os.environ.get('LINE_CHANNEL_TOKEN')
 USER_ID = os.environ.get('LINE_USER_ID')
 TICKERS = ['00631L.TW', '00675L.TW']
 
 def send_push(msg):
-    """發送 LINE Push Message"""
+    """透過 LINE Messaging API 發送推播訊息"""
     if not CHANNEL_TOKEN or not USER_ID:
         print("❌ 錯誤：未讀取到 Token 或 User ID")
         return
@@ -46,19 +45,15 @@ def analyze_strategy(ticker):
         bias = ((price - ma60) / ma60) * 100             # 季線乖離率
 
         # 3. 計算 ADX 趨勢指標 (長度 14)
-        # ADX < 20 代表盤整(耗損風險高); ADX > 25 代表有趨勢
         adx_df = df.ta.adx(length=14)
-        if adx_df is None or adx_df.empty:
-            adx = 0
-        else:
-            adx = adx_df['ADX_14'].iloc[-1]
+        adx = adx_df['ADX_14'].iloc[-1] if adx_df is not None and not adx_df.empty else 0
 
-        # 4. 策略邏輯判斷 (優先級：賣出保本 > 大跌抄底 > 盤整警告)
+        # 4. 策略邏輯判斷
         action = "觀望 / 續抱 (Hold)"
         icon = "👀"
         reason = f"趨勢延續 (ADX={adx:.1f})"
 
-        # --- A. 賣出訊號 (停利/停損) ---
+        # --- A. 賣出訊號 (優先檢查) ---
         if price < ma20:
             action = "🛡️ 獲利防守 (Sell 1/3)"
             icon = "🔴"
@@ -77,7 +72,6 @@ def analyze_strategy(ticker):
             reason = f"乖離起漲 > 15% ({bias:.1f}%)"
 
         # --- B. 買進訊號 (金字塔加碼) ---
-        # 只有在沒有賣出訊號時，才檢查買進
         elif price < ma120:
             action = "🔥 重擊加碼 (Buy 20%)"
             icon = "🟢🟢"
@@ -87,14 +81,14 @@ def analyze_strategy(ticker):
             icon = "🟢"
             reason = "跌破季線，價值進場"
             
-        # --- C. 盤整濾網 (若無買賣訊號，檢查是否盤整) ---
+        # --- C. 盤整濾網 (若無訊號) ---
         elif adx < 20:
             action = "⚠️ 盤整預警 (避開耗損)"
             icon = "🌫️"
             reason = f"ADX僅 {adx:.1f} 無趨勢，槓桿ETF易內扣耗損"
 
         return (
-            f"\n\n📊 【{ticker} 策略報告】"
+            f"\n\n📊 【{ticker} 尾盤戰報】"
             f"\n現價: {price:.2f} / 乖離: {bias:.1f}%"
             f"\n趨勢強度 (ADX): {adx:.1f}"
             f"\n關鍵均線: 季{ma60:.0f} / 半{ma120:.0f}"
@@ -106,12 +100,9 @@ def analyze_strategy(ticker):
     except Exception as e:
         return f"\n⚠️ {ticker} 分析錯誤: {e}"
 
-# === 主程式執行 ===
 if __name__ == "__main__":
-    print("🚀 開始執行 ADX 策略分析...")
-    report = f"📅 {datetime.now().strftime('%Y-%m-%d')} 投資雷達"
-    
+    print("🚀 執行收盤前策略掃描...")
+    report = f"⚡ {datetime.now().strftime('%Y-%m-%d')} 尾盤戰報 (13:20)"
     for t in TICKERS:
         report += analyze_strategy(t)
-    
     send_push(report)
