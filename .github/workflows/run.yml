@@ -11,7 +11,7 @@ jobs:
       - name: 設定 Python 環境
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10' # RL 套件通常對 3.10 支援度較佳
+          python-version: '3.12' 
 
       - name: 安裝 RL 依賴套件
         # 安裝 Stable-Baselines3, Gym, Shimmy 等關鍵庫
