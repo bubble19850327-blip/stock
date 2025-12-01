@@ -19,4 +19,4 @@ jobs:
           pip install stable-baselines3[extra] gym-anytrading yfinance pandas-ta shimmy
 
       - name: 執行 RL 交易策略
-        run: python nain.py
+        run: python main.py
