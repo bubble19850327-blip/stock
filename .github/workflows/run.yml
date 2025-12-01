@@ -1,2 +1,22 @@
-- name: 安裝 Python 套件
-      run: pip install -r requirements.txt
+name: RL 模型訓練與預測
+on:
+  workflow_dispatch:  # 允許手動觸發
+
+jobs:
+  train-and-predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: 設定 Python 環境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10' # RL 套件通常對 3.10 支援度較佳
+
+      - name: 安裝 RL 依賴套件
+        # 安裝 Stable-Baselines3, Gym, Shimmy 等關鍵庫
+        run: |
+          pip install stable-baselines3[extra] gym-anytrading yfinance pandas-ta shimmy
+
+      - name: 執行 RL 交易策略
+        run: python rl_trade.py
