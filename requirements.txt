@@ -1,3 +1,5 @@
+stable-baselines3
+gym-anytrading
 yfinance
-requests
-pandas_ta
+pandas-ta
+shimmy
