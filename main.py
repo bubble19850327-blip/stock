@@ -31,66 +31,67 @@ def send_push(msg):
         print(f"❌ 發送失敗: {e}")
 
 def analyze_strategy(ticker):
-    """分析個股策略：ADX濾網 + 金字塔買進 + 網格停利"""
+    """
+    長期持有策略：
+    1. 不停損：移除跌破月線賣出的邏輯。
+    2. 再平衡賣出：乖離過大時分批賣出，將資金轉回現金/0050。
+    3. 再平衡買進：跌破季線/半年線時動用現金買進。
+    4. ADX濾網：僅作為盤整提醒，不強制出場。
+    """
     try:
-        # 1. 抓取數據 (取 150 天以確保 ADX 計算穩定)
+        # 1. 抓取數據
         df = yf.Ticker(ticker).history(period="150d")
         if len(df) < 120: return f"\n⚠️ {ticker} 數據不足"
 
-        # 2. 計算基礎指標
+        # 2. 計算指標
         price = df['Close'].iloc[-1]
-        ma20 = df['Close'].rolling(20).mean().iloc[-1]   # 月線 (防守)
-        ma60 = df['Close'].rolling(60).mean().iloc[-1]   # 季線 (價值)
-        ma120 = df['Close'].rolling(120).mean().iloc[-1] # 半年線 (重壓)
+        ma60 = df['Close'].rolling(60).mean().iloc[-1]   # 季線 (買點1)
+        ma120 = df['Close'].rolling(120).mean().iloc[-1] # 半年線 (買點2)
         bias = ((price - ma60) / ma60) * 100             # 季線乖離率
 
-        # 3. 計算 ADX 趨勢指標 (長度 14)
+        # ADX 趨勢強度
         adx_df = df.ta.adx(length=14)
         adx = adx_df['ADX_14'].iloc[-1] if adx_df is not None and not adx_df.empty else 0
 
-        # 4. 策略邏輯判斷
-        action = "觀望 / 續抱 (Hold)"
-        icon = "👀"
-        reason = f"趨勢延續 (ADX={adx:.1f})"
+        # 3. 策略邏輯 (優先檢查停利，再來檢查加碼)
+        action = "信仰續抱 (Hold)"
+        icon = "💎" # 鑽石手，代表長期持有
+        reason = f"趨勢行進中 (ADX={adx:.1f})"
 
-        # --- A. 賣出訊號 (優先檢查) ---
-        if price < ma20:
-            action = "🛡️ 獲利防守 (Sell 1/3)"
-            icon = "🔴"
-            reason = "跌破月線，短線轉弱"
-        elif bias > 25:
+        # --- A. 網格停利 (再平衡賣出：轉為現金) ---
+        if bias > 25:
             action = "🚀 網格停利 3 (Sell 10%)"
             icon = "💰💰"
-            reason = f"乖離過熱 > 25% ({bias:.1f}%)"
+            reason = f"乖離過熱 > 25% ({bias:.1f}%)，獲利入袋"
         elif bias > 20:
             action = "🚀 網格停利 2 (Sell 10%)"
             icon = "💰"
-            reason = f"乖離擴大 > 20% ({bias:.1f}%)"
+            reason = f"乖離擴大 > 20% ({bias:.1f}%)，調節水位"
         elif bias > 15:
             action = "🚀 網格停利 1 (Sell 10%)"
             icon = "🟠"
-            reason = f"乖離起漲 > 15% ({bias:.1f}%)"
+            reason = f"乖離起漲 > 15% ({bias:.1f}%)，適度減碼"
 
-        # --- B. 買進訊號 (金字塔加碼) ---
+        # --- B. 金字塔買進 (再平衡買進：動用現金) ---
         elif price < ma120:
             action = "🔥 重擊加碼 (Buy 20%)"
             icon = "🟢🟢"
-            reason = "跌破半年線，超跌進場"
+            reason = "跌破半年線，嚴重超跌，大膽買進"
         elif price < ma60:
             action = "✨ 試單加碼 (Buy 10%)"
             icon = "🟢"
-            reason = "跌破季線，價值進場"
+            reason = "跌破季線，價值浮現，分批承接"
             
-        # --- C. 盤整濾網 (若無訊號) ---
+        # --- C. 盤整提示 (僅提示，不賣出) ---
         elif adx < 20:
-            action = "⚠️ 盤整預警 (避開耗損)"
-            icon = "🌫️"
-            reason = f"ADX僅 {adx:.1f} 無趨勢，槓桿ETF易內扣耗損"
+            action = "⚠️ 盤整忍耐 (波動耗損)"
+            icon = "🧘" # 靜坐忍耐
+            reason = f"ADX僅 {adx:.1f} 無趨勢，耐心度過震盪期"
 
         return (
-            f"\n\n📊 【{ticker} 尾盤戰報】"
+            f"\n\n📊 【{ticker} 長期戰報】"
             f"\n現價: {price:.2f} / 乖離: {bias:.1f}%"
-            f"\n趨勢強度 (ADX): {adx:.1f}"
+            f"\nADX強度: {adx:.1f}"
             f"\n關鍵均線: 季{ma60:.0f} / 半{ma120:.0f}"
             f"\n------------------"
             f"\n💡 建議: {icon} {action}"
@@ -101,7 +102,8 @@ def analyze_strategy(ticker):
         return f"\n⚠️ {ticker} 分析錯誤: {e}"
 
 if __name__ == "__main__":
-    print("🚀 執行收盤前策略掃描...")
+    print("🚀 執行收盤前策略掃描 (長期持有版)...")
+    # 標題標示為 13:20 預判
     report = f"⚡ {datetime.now().strftime('%Y-%m-%d')} 尾盤戰報 (13:20)"
     for t in TICKERS:
         report += analyze_strategy(t)
