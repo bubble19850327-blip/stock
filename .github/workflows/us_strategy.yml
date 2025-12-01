@@ -1,0 +1,18 @@
+name: 美股早安策略
+on:
+  schedule:
+    - cron: '30 23 * * 1-5' # UTC 23:30 (週一至週五)
+  workflow_dispatch:
+
+jobs:
+  run-us:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.12' } # 配合 pandas_ta
+      - run: pip install -r requirements.txt
+      - env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py us  # <--- 這裡指定跑美股
