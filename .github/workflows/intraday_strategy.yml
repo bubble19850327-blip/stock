@@ -24,4 +24,4 @@ jobs:
           # 修正點：必須使用 ${{ secrets.名稱 }} 才能讀取密鑰
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python main.py
+        run: python main.py tw
