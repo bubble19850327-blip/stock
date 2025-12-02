@@ -1,0 +1,18 @@
+name: 台股盤前戰報 (08:00)
+on:
+  schedule:
+    - cron: '0 0 * * 1-5' # UTC 00:00 = 台灣 08:00
+  workflow_dispatch:
+
+jobs:
+  run-pre-open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.12' }
+      - run: pip install -r requirements.txt
+      - env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py pre_open  # 指定執行盤前模式
