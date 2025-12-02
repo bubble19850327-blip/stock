@@ -1,18 +1,27 @@
-name: 台股盤前戰報 (08:00)
+name: 每日股價策略
+
 on:
   schedule:
-    - cron: '0 0 * * 1-5' # UTC 00:00 = 台灣 08:00
-  workflow_dispatch:
+    # 台灣時間 12:30 = UTC 時間 04:30 (週一至週五)
+    - cron: '30 4 * * 1-5'
+  workflow_dispatch:      # 允許手動按鈕觸發測試
 
 jobs:
-  run-pre-open:
+  run-strategy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - uses: actions/setup-python@v4
-        with: { python-version: '3.12' }
-      - run: pip install -r requirements.txt
-      - env:
+        with:
+          python-version: '3.12'
+          
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+        
+      - name: 執行策略
+        env:
+          # 修正點：必須使用 ${{ secrets.名稱 }} 才能讀取密鑰
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-        run: python main.py pre_open  # 指定執行盤前模式
+        run: python main.py
