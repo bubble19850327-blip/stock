@@ -1,9 +1,7 @@
 import os
 import requests
 import yfinance as yf
-import pandas_ta as ta
 from bs4 import BeautifulSoup
-from datetime import datetime
 
 # === 設定區 ===
 CHANNEL_TOKEN = os.environ.get('LINE_CHANNEL_TOKEN')
@@ -29,7 +27,6 @@ def get_spot_price():
         
         for row in rows:
             text = row.text.strip()
-            # 抓取指標性產品
             if "DDR4 8G" in text and data["DRAM"] == "N/A":
                 cols = row.find_all("td")
                 data["DRAM"] = cols[1].text.strip()
@@ -44,13 +41,12 @@ def get_spot_price():
     return data
 
 def get_contract_news():
-    """搜尋合約價相關新聞 (模擬合約價趨勢)"""
-    # 這裡使用 Google News RSS 搜尋關鍵字
+    """搜尋合約價相關新聞"""
     url = "https://news.google.com/rss/search?q=記憶體+合約價+when:7d&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
     try:
         res = requests.get(url, timeout=5)
         soup = BeautifulSoup(res.text, "xml")
-        items = soup.find_all("item", limit=3) # 只看最新的 3 則
+        items = soup.find_all("item", limit=3)
         
         news_sentiment = "無重大消息"
         titles = []
@@ -65,15 +61,20 @@ def get_contract_news():
         return "N/A", []
 
 def analyze_phison():
-    ticker = "8299.TW"
+    # ⚠️ 修正：上櫃股票代號結尾為 .TWO
+    ticker = "8299.TWO"
     
     # 1. 抓取股價
-    df = yf.Ticker(ticker).history(period="150d")
-    if len(df) < 60: return "⚠️ 數據不足"
-    
-    price = df['Close'].iloc[-1]
-    ma20 = df['Close'].rolling(20).mean().iloc[-1]
-    ma60 = df['Close'].rolling(60).mean().iloc[-1]
+    try:
+        df = yf.Ticker(ticker).history(period="150d")
+        if df.empty or len(df) < 60: 
+            return f"⚠️ 無法取得 {ticker} 股價數據，請檢查代號或網路。"
+        
+        price = df['Close'].iloc[-1]
+        ma20 = df['Close'].rolling(20).mean().iloc[-1]
+        ma60 = df['Close'].rolling(60).mean().iloc[-1]
+    except Exception as e:
+        return f"⚠️ 股價抓取錯誤: {e}"
     
     # 2. 抓取基本面數據
     spot_data = get_spot_price()
@@ -83,7 +84,6 @@ def analyze_phison():
     action = "觀望 (Wait)"
     reason = "多空不明"
     
-    # 策略邏輯：現貨漲 + 股價強 = 買進
     if spot_data["Trend"] == "🔺 上漲" and price > ma20:
         action = "🔥 順勢買進"
         reason = "現貨報價上揚且股價站穩月線"
