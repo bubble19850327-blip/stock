@@ -1,7 +1,7 @@
 name: 台股盤前戰報 (08:00)
 on:
   schedule:
-    - cron: '0 0 * * 1-5' # UTC 00:00 = 台灣 08:00
+    - cron: '0 22 * * *' # UTC 22:00 = 台灣時間隔日早上 06:00
   workflow_dispatch:
 
 jobs:
