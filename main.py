@@ -99,4 +99,82 @@ def analyze_strategy(ticker, current_vix):
         ma60 = df['Close'].rolling(60).mean().iloc[-1]
         ma120 = df['Close'].rolling(120).mean().iloc[-1]
         bias = ((price - ma60) / ma60) * 100
-        adx = df.
+        adx = df.ta.adx(length=14)['ADX_14'].iloc[-1] if df.ta.adx(length=14) is not None else 0
+        
+        is_us = ticker in US_TICKERS
+        title_icon = "🇺🇸" if is_us else "🇹🇼"
+        
+        # 1. 結算日與價差濾網
+        settlement_msg, days_to_settle = get_settlement_status()
+        spot, fut, basis = get_futures_basis()
+        basis_msg = f"/ 價差: {basis:.0f}" if "TW" in ticker else ""
+        
+        # 2. 溢價檢查 (台股 ETF)
+        premium_msg = ""
+        is_premium_high = False
+        if not is_us and "0050" not in ticker:
+            nav = get_realtime_nav(ticker)
+            if nav:
+                premium = ((price - nav) / nav) * 100
+                premium_msg = f"/ 溢價: {premium:+.2f}%"
+                if premium > 3.0: is_premium_high = True; premium_msg += " 🔥太貴"
+                elif premium < -1.0: premium_msg += " 💧折價"
+
+        # 3. 策略核心
+        action = "信仰續抱"
+        icon = "💎"
+        reason = f"趨勢行進 (ADX={adx:.1f})"
+
+        # A. 優先檢查：結算日風險 (僅針對台股正二)
+        if "00631L" in ticker or "00675L" in ticker:
+            if days_to_settle == 0:
+                settlement_msg += f" (🔥本日結算)"
+                if basis > 40: action, icon, reason = "⚠️ 提防殺尾盤", "📉", "順價差過大，期貨恐補跌"
+                elif basis < -60: action, icon, reason = "✨ 期待拉尾盤", "📈", "逆價差過大，易拉高收斂"
+                else: action, icon, reason = "觀望 (避結算)", "👀", "結算日震盪風險"
+            elif days_to_settle == 1 and bias > 20:
+                action, icon, reason = "🚀 提前停利", "💰", "明日結算+乖離大，落袋為安"
+
+        # B. 優先檢查：溢價套利 (送分題)
+        if is_premium_high:
+            action, icon, reason = "💎 溢價套利 (賣)", "💸", "溢價>3% 價格虛高"
+
+        # C. 存股策略 (0050)
+        elif ticker == '0050.TW':
+            k_val = df.ta.stoch(k=9, d=3)['STOCHk_9_3_3'].iloc[-1]
+            if current_vix > 30: action, icon, reason = "💎 恐慌貪婪買", "🔥🔥", f"VIX飆高 {current_vix:.1f}"
+            elif k_val < 20: action, icon, reason = "💰 KD超賣買", "📉", "KD低檔鈍化"
+            elif price < df['Open'].iloc[-1]: action, icon, reason = "✅ 收綠買進", "🌱", "日常累積股數"
+            else: action, icon, reason = "觀望", "👀", "暫不追高"
+
+        # D. 波段策略 (槓桿/科技)
+        elif "TW" in ticker or is_us: # 排除掉 0050 後
+            if bias > (30 if is_us else 25): action, icon, reason = "🚀 網格停利", "💰", f"乖離過熱 {bias:.1f}%"
+            elif price < ma120 and current_vix > 30: action, icon, reason = "💎 恐慌鑽石買", "🔥🔥🔥", "半年線+VIX爆表"
+            elif price < ma60: action, icon, reason = "✨ 試單加碼", "🟢", "季線價值浮現"
+            elif adx < 20: action, icon, reason = "⚠️ 盤整忍耐", "🧘", "無趨勢避耗損"
+
+        # 整理報告
+        settle_info = f"\n🗓️ {settlement_msg}" if settlement_msg else ""
+        return f"\n\n📊 【{title_icon} {ticker}】{settle_info}{basis_msg}\n現價: {price:.2f} (乖離 {bias:.1f}%)\n{premium_msg}\n💡 {icon} {action}\n📝 {reason}"
+
+    except Exception as e: return f"\n⚠️ {ticker} 錯誤: {e}"
+
+# === 主程式入口 ===
+if __name__ == "__main__":
+    mode = sys.argv[1] if len(sys.argv) > 1 else "all"
+    print(f"🚀 啟動模式: {mode}")
+
+    if mode == "pre_open":
+        tickers = ['TSM', '^SOX', '^NDX', '^VIX']
+        data = yf.download(tickers, period="5d", progress=False)['Close']
+        changes = data.pct_change().iloc[-1] * 100
+        last_close = data.iloc[-1]
+        info = {'tsm': changes['TSM'], 'ndx': changes['^NDX'], 'vix': last_close['^VIX']}
+        send_push(analyze_pre_open(info))
+    else:
+        target_list = US_TICKERS if mode == "us" else TW_TICKERS if mode == "tw" else TW_TICKERS + US_TICKERS
+        vix = get_vix()
+        report = f"⚡ 投資戰報 {datetime.now().strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
+        for t in target_list: report += analyze_strategy(t, vix)
+        send_push(report)
