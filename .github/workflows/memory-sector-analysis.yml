@@ -1,0 +1,30 @@
+name: 記憶體族群全方位戰報
+
+on:
+  schedule:
+    # 早上 07:00 (UTC 23:00 前一天) - 盤前規劃
+    - cron: '0 23 * * *'
+    # 下午 16:00 (UTC 08:00) - 盤後檢討
+    - cron: '0 8 * * *'
+  workflow_dispatch:      # 允許手動執行
+
+jobs:
+  run-memory-analysis:    # ID 改為更通用的名稱
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          
+      - name: 安裝相依套件
+        run: pip install requests yfinance pandas_ta beautifulsoup4 lxml
+
+      - name: 執行記憶體四大天王分析
+        env:
+          # ⚠️ 修正：必須使用 ${{ secrets.VAR }} 才能讀取 GitHub Secret
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        # 請確認 Python 檔名已同步修改
+        run: python memory_strategy.py
