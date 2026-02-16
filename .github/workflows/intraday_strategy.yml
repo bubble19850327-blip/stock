@@ -3,7 +3,7 @@ name: 每日股價策略
 on:
   schedule:
     # 台灣時間 12:30 = UTC 時間 04:30 (週一至週五)
-    - cron: '30 2 * * 1-5'
+    - cron: '30 4 * * 1-5'
   workflow_dispatch:      # 允許手動按鈕觸發測試
 
 jobs:
@@ -17,11 +17,37 @@ jobs:
           python-version: '3.12'
           
       - name: 安裝套件
-        run: pip install -r requirements.txt
-        
+        # 新增 workalendar 用於判斷國定假日
+        run: |
+          pip install -r requirements.txt
+          pip install workalendar
+
+      - name: 檢查是否為台灣交易日
+        id: check_date  # 設定 ID 以便後續步驟參照
+        run: |
+          python -c "
+          import os
+          from datetime import date
+          from workalendar.asia import Taiwan
+
+          # 初始化台灣行事曆
+          cal = Taiwan()
+          today = date.today() # UTC 04:30 與台灣同日期，可直接用 UTC 日期
+
+          # 判斷是否為工作日 (排除週末與國定假日)
+          is_trading_day = cal.is_working_day(today)
+          
+          # 將結果寫入 GitHub Outputs
+          print(f'Is trading day: {is_trading_day}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'should_run={str(is_trading_day).lower()}\n')
+          "
+          
       - name: 執行策略
+        # 只有當上一步驟輸出為 true 時才執行
+        if: steps.check_date.outputs.should_run == 'true'
         env:
-          # 修正點：必須使用 ${{ secrets.名稱 }} 才能讀取密鑰
+          # 修正：GitHub Actions 讀取密鑰需使用 ${{ secrets.KEY }} 語法
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py tw
