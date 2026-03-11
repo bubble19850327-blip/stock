@@ -33,7 +33,7 @@ def send_push(msg):
 
 def get_spot_price():
     """抓取記憶體現貨價，含規格、單位與備份機制"""
-    url = "https://www.cnyes.com/futures/material5.aspx"
+    url = "https://www.trendforce.com.tw/price/dram/dram_spot"
     headers = {"User-Agent": "Mozilla/5.0"}
     
     # 預設使用備份數據
