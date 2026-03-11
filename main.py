@@ -107,7 +107,7 @@ def analyze_strategy(ticker, current_vix):
         # 1. 結算日與價差濾網
         settlement_msg, days_to_settle = get_settlement_status()
         spot, fut, basis = get_futures_basis()
-        basis_msg = f"/ 價差: {basis:.0f}" if "TW" in ticker else ""
+        basis_msg = f" \n 價差: {basis:.0f}" if "TW" in ticker else ""
         
         # 2. 溢價檢查 (台股 ETF)
         premium_msg = ""
@@ -178,3 +178,4 @@ if __name__ == "__main__":
         report = f"⚡ 投資戰報 {datetime.now().strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
         for t in target_list: report += analyze_strategy(t, vix)
         send_push(report)
+
