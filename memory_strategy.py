@@ -133,7 +133,7 @@ if __name__ == "__main__":
     tw_now = datetime.now(tw_tz)
     
     # 標題加入台灣時間，精確到分
-    full_report = f"⚡ 記憶體戰報 {tw_now.strftime('%Y-%m-%d %H:%M')}\n━━━━━━━━━━━━━\n"
+    full_report = f"⚡ 記憶體戰報 \n {tw_now.strftime('%Y-%m-%d %H:%M')}\n━━━━━━━━━━━━━\n"
     
     for t, n in targets:
         full_report += analyze_memory_stock(t, n, global_spot, global_sentiment) + "\n"
