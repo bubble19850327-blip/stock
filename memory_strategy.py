@@ -120,7 +120,7 @@ def analyze_memory_stock(ticker, name, spot_data, contract_sentiment):
     return (
         f"💾 【{name} {ticker}】\n"
         f"現價: {price:.1f} | 季線: {ma60:.1f}\n"
-        f"焦點: {focus_spot}\n"
+        # f"焦點: {focus_spot}\n"
         f"💡 {action} ({reason})\n"
     )
 
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     targets = [("8299", "群聯"), ("2337", "旺宏"), ("2408", "南亞科"), ("2344", "華邦電")]
     
     # 使用更明顯的分隔線
-    full_report = f"⚡ 記憶體戰報 {datetime.date.today()}\n━━━━━━━━━━━━━━━\n"
+    full_report = f"⚡ 記憶體戰報 {datetime.date.today()}\n━━━━━━━━━━━━━\n"
     
     for t, n in targets:
         full_report += analyze_memory_stock(t, n, global_spot, global_sentiment) + "\n"
