@@ -45,7 +45,7 @@ def get_realtime_nav(ticker):
 
 def get_settlement_status():
     # 計算台指期結算日 (每月第3個週三)
-    # 🌟 修改：確保以台灣時區的「今天」為準
+    # 確保以台灣時區的「今天」為準
     tw_tz = timezone(timedelta(hours=8))
     today = datetime.now(tw_tz).date()
     cal = calendar.monthcalendar(today.year, today.month)
@@ -80,8 +80,10 @@ def get_futures_basis():
 
 # === 策略模組 ===
 def analyze_pre_open(data):
-    # 08:00 盤前分析
-    tsm, ndx, vix = data['tsm'], data['ndx'], data['vix']
+    # 08:00 盤前分析 (加入四大指數)
+    tsm = data['tsm_pct']
+    vix = data['vix']
+    
     sentiment = "😐 中性"
     if tsm > 2.5: sentiment = "🔥 極度樂觀"
     elif tsm < -2.5: sentiment = "❄️ 極度悲觀"
@@ -90,7 +92,24 @@ def analyze_pre_open(data):
     if tsm < -2: advice_0050 = "✅ 掛低買進"
     elif vix > 30: advice_0050 = "💎 恐慌貪婪買"
     
-    return f"🌅 08:00 盤前戰報\n氣氛: {sentiment}\nTSM: {tsm:+.2f}%\nVIX: {vix:.1f}\n💡 0050: {advice_0050}"
+    # 格式化指數顯示函數
+    def format_idx(name, price, pct):
+        icon = "🔴" if pct < 0 else "🟢"
+        return f"{icon} {name}: {price:.1f} ({pct:+.2f}%)"
+    
+    return (
+        f"🌅 08:00 盤前戰報\n"
+        f"氣氛: {sentiment}\n"
+        f"TSM: {tsm:+.2f}%\n"
+        f"VIX: {vix:.1f}\n"
+        f"--- 美股四大指數 ---\n"
+        f"{format_idx('道瓊', data['dji_price'], data['dji_pct'])}\n"
+        f"{format_idx('標普', data['spx_price'], data['spx_pct'])}\n"
+        f"{format_idx('那指', data['ndx_price'], data['ndx_pct'])}\n"
+        f"{format_idx('費半', data['sox_price'], data['sox_pct'])}\n"
+        f"------------------\n"
+        f"💡 0050: {advice_0050}"
+    )
 
 def analyze_strategy(ticker, current_vix):
     # 13:20 盤中/收盤分析
@@ -182,16 +201,25 @@ if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
     print(f"🚀 啟動模式: {mode}")
 
-    # 🌟 建立台灣時區 (UTC+8)
+    # 建立台灣時區 (UTC+8)
     tw_tz = timezone(timedelta(hours=8))
     tw_now = datetime.now(tw_tz)
 
     if mode == "pre_open":
-        tickers = ['TSM', '^SOX', '^NDX', '^VIX']
+        # 加入四大指數代號：道瓊(^DJI), 標普(^GSPC), 那指(^IXIC), 費半(^SOX)
+        tickers = ['TSM', '^SOX', '^IXIC', '^DJI', '^GSPC', '^VIX']
         data = yf.download(tickers, period='5d', progress=False)['Close']
         changes = data.pct_change().iloc[-1] * 100
         last_close = data.iloc[-1]
-        info = {'tsm': changes['TSM'], 'ndx': changes['^NDX'], 'vix': last_close['^VIX']}
+        
+        info = {
+            'tsm_pct': changes['TSM'],
+            'vix': last_close['^VIX'],
+            'dji_price': last_close['^DJI'], 'dji_pct': changes['^DJI'],
+            'spx_price': last_close['^GSPC'], 'spx_pct': changes['^GSPC'],
+            'ndx_price': last_close['^IXIC'], 'ndx_pct': changes['^IXIC'],
+            'sox_price': last_close['^SOX'], 'sox_pct': changes['^SOX']
+        }
         
         # 加上台灣時間戳記
         report = f"📅 {tw_now.strftime('%Y-%m-%d %H:%M')}\n" + analyze_pre_open(info)
@@ -200,7 +228,7 @@ if __name__ == "__main__":
         target_list = US_TICKERS if mode == "us" else TW_TICKERS if mode == "tw" else TW_TICKERS + US_TICKERS
         vix = get_vix()
         
-        # 🌟 修改：將推播時間強制設定為台灣時間
+        # 將推播時間強制設定為台灣時間
         report = f"⚡ 投資戰報 {tw_now.strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
         for t in target_list: report += analyze_strategy(t, vix)
         send_push(report)
