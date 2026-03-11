@@ -121,7 +121,7 @@ def analyze_memory_stock(ticker, name, spot_data, contract_sentiment):
         f"💾 【{name} {ticker}】\n"
         f"現價: {price:.1f} | 季線: {ma60:.1f}\n"
         # f"焦點: {focus_spot}\n"
-        f"💡 {action} ({reason})\n"
+        f"💡 {action} \n ({reason})\n"
     )
 
 if __name__ == "__main__":
