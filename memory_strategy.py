@@ -2,7 +2,7 @@ import os
 import requests
 import yfinance as yf
 from bs4 import BeautifulSoup
-import datetime
+from datetime import datetime, timezone, timedelta
 
 # === 設定區 ===
 CHANNEL_TOKEN = os.environ.get('LINE_CHANNEL_TOKEN')
@@ -25,7 +25,7 @@ def send_push(msg):
     requests.post('https://api.line.me/v2/bot/message/push', headers=headers, json=body)
 
 def get_trendforce_spot_price():
-    """從 TrendForce 抓取記憶體現貨價"""
+    # 從 TrendForce 抓取記憶體現貨價
     url = "https://www.trendforce.com.tw/price/dram/dram_spot"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     data = FALLBACK_DATA.copy()
@@ -35,7 +35,7 @@ def get_trendforce_spot_price():
         if res.status_code != 200: return data
 
         soup = BeautifulSoup(res.text, "html.parser")
-        # TrendForce 報價通常在 class="table" 內的 tbody 中
+        # TrendForce 報價通常在 class=table 內的 tbody 中
         rows = soup.find_all("tr")
         found_dram = found_nand = False
         
@@ -45,7 +45,6 @@ def get_trendforce_spot_price():
             
             spec_name = cols[0].text.strip()
             # TrendForce 通常 Average/Session 價格在索引 2 或 3，漲跌幅在 4 或 5
-            # 這裡我們取 Session Price 作為參考 (假設為 index 2)
             price = cols[2].text.strip()
             change_text = cols[4].text.strip()
             
@@ -86,7 +85,7 @@ def get_contract_news():
     except: return "N/A"
 
 def format_price_display(info):
-    """處理 N/A 時不顯示單位的問題"""
+    # 處理 N/A 時不顯示單位的問題
     if info['price'] == "N/A":
         return f"N/A ({info['spec']})"
     return f"{info['unit']}{info['price']} ({info['spec']})"
@@ -95,11 +94,11 @@ def analyze_memory_stock(ticker, name, spot_data, contract_sentiment):
     yf_ticker = f"{ticker}.TWO" if ticker == "8299" else f"{ticker}.TW"
     try:
         df = yf.Ticker(yf_ticker).history(period="150d")
-        if df.empty or len(df) < 60: return f"⚠️ {name} 數據不足"
+        if df.empty or len(df) < 60: return f"⚠️ {name} 數據不足\n"
         price = df['Close'].iloc[-1]
         ma20 = df['Close'].rolling(20).mean().iloc[-1]
         ma60 = df['Close'].rolling(60).mean().iloc[-1]
-    except: return f"⚠️ {name} 抓取錯誤"
+    except: return f"⚠️ {name} 抓取錯誤\n"
 
     # 顯示對應焦點
     if ticker == "2408": focus_spot = f"DRAM: {format_price_display(spot_data['DRAM'])}"
@@ -120,7 +119,6 @@ def analyze_memory_stock(ticker, name, spot_data, contract_sentiment):
     return (
         f"💾 【{name} {ticker}】\n"
         f"現價: {price:.1f} | 季線: {ma60:.1f}\n"
-        # f"焦點: {focus_spot}\n"
         f"💡 {action} \n ({reason})\n"
     )
 
@@ -130,8 +128,12 @@ if __name__ == "__main__":
     
     targets = [("8299", "群聯"), ("2337", "旺宏"), ("2408", "南亞科"), ("2344", "華邦電")]
     
-    # 使用更明顯的分隔線
-    full_report = f"⚡ 記憶體戰報 {datetime.date.today()}\n━━━━━━━━━━━━━\n"
+    # === 設定台灣時區 (UTC+8) ===
+    tw_tz = timezone(timedelta(hours=8))
+    tw_now = datetime.now(tw_tz)
+    
+    # 標題加入台灣時間，精確到分
+    full_report = f"⚡ 記憶體戰報 {tw_now.strftime('%Y-%m-%d %H:%M')}\n━━━━━━━━━━━━━\n"
     
     for t, n in targets:
         full_report += analyze_memory_stock(t, n, global_spot, global_sentiment) + "\n"
