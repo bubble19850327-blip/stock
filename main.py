@@ -156,7 +156,7 @@ def analyze_strategy(ticker, current_vix):
 
         # 整理報告
         settle_info = f"\n🗓️ {settlement_msg}" if settlement_msg else ""
-        return f"\n\n📊 【{title_icon} {ticker}】{settle_info}{basis_msg}\n現價: {price:.2f} (乖離 {bias:.1f}%)\n{premium_msg}\n💡 {icon} {action}\n📝 {reason}"
+        return f"\n\n📊 【{title_icon} {ticker}】{settle_info}{basis_msg}\n現價: {price:.2f} (乖離 {bias:.1f}%)\n{premium_msg}💡 {icon} {action}\n📝 {reason}"
 
     except Exception as e: return f"\n⚠️ {ticker} 錯誤: {e}"
 
@@ -178,5 +178,6 @@ if __name__ == "__main__":
         report = f"⚡ 投資戰報 {datetime.now().strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
         for t in target_list: report += analyze_strategy(t, vix)
         send_push(report)
+
 
 
