@@ -4,7 +4,7 @@ import requests
 import yfinance as yf
 import pandas_ta as ta
 import calendar
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from bs4 import BeautifulSoup
 
 # === 設定區 ===
@@ -45,7 +45,9 @@ def get_realtime_nav(ticker):
 
 def get_settlement_status():
     # 計算台指期結算日 (每月第3個週三)
-    today = datetime.now().date()
+    # 🌟 修改：確保以台灣時區的「今天」為準
+    tw_tz = timezone(timedelta(hours=8))
+    today = datetime.now(tw_tz).date()
     cal = calendar.monthcalendar(today.year, today.month)
     # week[2] 是星期三，若為0代表該週沒這天
     wednesdays = [week[2] for week in cal if week[2] != 0]
@@ -163,7 +165,7 @@ def analyze_strategy(ticker, current_vix):
                 action, icon, reason = "💎 恐慌鑽石買", "🔥🔥🔥", "半年線+VIX爆表"
             elif price < ma60: 
                 action, icon, reason = "✨ 試單加碼", "🟢", "季線價值浮現"
-            # 🌟 新增：跌破月線但具備多頭趨勢濾網
+            # 🌟 強勢回檔買點：跌破月線但具備多頭趨勢濾網
             elif price < ma20 and adx > 25 and ma20 > ma20_prev: 
                 action, icon, reason = "🎯 強勢回檔買", "🟡", "破月線但趨勢強(ADX>25)且月線上揚"
             elif adx < 20: 
@@ -180,16 +182,25 @@ if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
     print(f"🚀 啟動模式: {mode}")
 
+    # 🌟 建立台灣時區 (UTC+8)
+    tw_tz = timezone(timedelta(hours=8))
+    tw_now = datetime.now(tw_tz)
+
     if mode == "pre_open":
         tickers = ['TSM', '^SOX', '^NDX', '^VIX']
         data = yf.download(tickers, period='5d', progress=False)['Close']
         changes = data.pct_change().iloc[-1] * 100
         last_close = data.iloc[-1]
         info = {'tsm': changes['TSM'], 'ndx': changes['^NDX'], 'vix': last_close['^VIX']}
-        send_push(analyze_pre_open(info))
+        
+        # 加上台灣時間戳記
+        report = f"📅 {tw_now.strftime('%Y-%m-%d %H:%M')}\n" + analyze_pre_open(info)
+        send_push(report)
     else:
         target_list = US_TICKERS if mode == "us" else TW_TICKERS if mode == "tw" else TW_TICKERS + US_TICKERS
         vix = get_vix()
-        report = f"⚡ 投資戰報 {datetime.now().strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
+        
+        # 🌟 修改：將推播時間強制設定為台灣時間
+        report = f"⚡ 投資戰報 {tw_now.strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
         for t in target_list: report += analyze_strategy(t, vix)
         send_push(report)
