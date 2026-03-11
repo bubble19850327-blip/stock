@@ -96,10 +96,16 @@ def analyze_strategy(ticker, current_vix):
         df = yf.Ticker(ticker).history(period='200d')
         if len(df) < 120: return ""
         price = df['Close'].iloc[-1]
+        
+        # 計算均線與昨日月線 (用於判斷斜率)
+        ma20 = df['Close'].rolling(20).mean().iloc[-1]
+        ma20_prev = df['Close'].rolling(20).mean().iloc[-2] # 昨日月線
         ma60 = df['Close'].rolling(60).mean().iloc[-1]
         ma120 = df['Close'].rolling(120).mean().iloc[-1]
         bias = ((price - ma60) / ma60) * 100
-        adx = df.ta.adx(length=14)['ADX_14'].iloc[-1] if df.ta.adx(length=14) is not None else 0
+        
+        adx_data = df.ta.adx(length=14)
+        adx = adx_data['ADX_14'].iloc[-1] if adx_data is not None else 0
         
         is_us = ticker in US_TICKERS
         title_icon = "🇺🇸" if is_us else "🇹🇼"
@@ -108,7 +114,7 @@ def analyze_strategy(ticker, current_vix):
         settlement_msg, days_to_settle = get_settlement_status()
         spot, fut, basis = get_futures_basis()
         
-        # 僅在「台股」且「當天為結算日(days_to_settle == 0)」才顯示價差
+        # 僅在台股結算日當天顯示
         basis_msg = f" \n 台指期結算日價差: {basis:.0f}" if "TW" in ticker and days_to_settle == 0 else ""
         
         # 2. 溢價檢查 (台股 ETF)
@@ -151,10 +157,17 @@ def analyze_strategy(ticker, current_vix):
 
         # D. 波段策略 (槓桿/科技)
         elif "TW" in ticker or is_us: # 排除掉 0050 後
-            if bias > (30 if is_us else 25): action, icon, reason = "🚀 網格停利", "💰", f"乖離過熱 {bias:.1f}%"
-            elif price < ma120 and current_vix > 30: action, icon, reason = "💎 恐慌鑽石買", "🔥🔥🔥", "半年線+VIX爆表"
-            elif price < ma60: action, icon, reason = "✨ 試單加碼", "🟢", "季線價值浮現"
-            elif adx < 20: action, icon, reason = "⚠️ 盤整忍耐", "🧘", "無趨勢避耗損"
+            if bias > (30 if is_us else 25): 
+                action, icon, reason = "🚀 網格停利", "💰", f"乖離過熱 {bias:.1f}%"
+            elif price < ma120 and current_vix > 30: 
+                action, icon, reason = "💎 恐慌鑽石買", "🔥🔥🔥", "半年線+VIX爆表"
+            elif price < ma60: 
+                action, icon, reason = "✨ 試單加碼", "🟢", "季線價值浮現"
+            # 🌟 新增：跌破月線但具備多頭趨勢濾網
+            elif price < ma20 and adx > 25 and ma20 > ma20_prev: 
+                action, icon, reason = "🎯 強勢回檔買", "🟡", "破月線但趨勢強(ADX>25)且月線上揚"
+            elif adx < 20: 
+                action, icon, reason = "⚠️ 盤整忍耐", "🧘", "無趨勢避耗損"
 
         # 整理報告
         settle_info = f"\n🗓️ {settlement_msg}" if settlement_msg else ""
