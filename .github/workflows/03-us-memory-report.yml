@@ -1,0 +1,22 @@
+name: 🌙 21:00 美股與記憶體戰報
+
+on:
+  schedule:
+    # 台灣時間 21:00 = UTC 13:00 (週一至週五)
+    - cron: '0 13 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run-us-memory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.12' }
+      - name: 安裝套件
+        run: pip install -r requirements.txt
+      - name: 執行美股與記憶體分析 (傳入 us_pre_market 參數)
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py us_pre_market
