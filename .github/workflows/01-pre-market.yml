@@ -1,22 +1,18 @@
-name: ☀️ 08:00 台股盤前戰報
-
+name: ☀️ 07:52 台股盤前戰報
 on:
   schedule:
-    # 台灣時間 08:00 = UTC 00:00 (週二至週六，對應美股週一至週五收盤)
-    - cron: '0 0 * * 2-6'
-  workflow_dispatch:
-
+    # 台灣週一至週五 07:52 = UTC 週日至週四 23:52
+    - cron: '52 23 * * 0-4'
+  workflow_dispatch: # 保留手動測試功能 [1]
 jobs:
   run-pre-market:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - name: 安裝套件
-        run: pip install -r requirements.txt
-      - name: 執行盤前分析 (傳入 pre_market 參數)
-        env:
+      - run: pip install -r requirements.txt
+      - env:
           LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: python main.py pre_market
