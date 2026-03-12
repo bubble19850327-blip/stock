@@ -1,0 +1,41 @@
+name: 🕒 13:20 台股尾盤策略
+
+on:
+  schedule:
+    # 台灣時間 13:20 = UTC 05:20 (週一至週五)
+    - cron: '20 5 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  run-tw-strategy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: { python-version: '3.12' }
+        
+      - name: 安裝套件
+        run: |
+          pip install -r requirements.txt
+          pip install workalendar
+
+      - name: 檢查是否為台灣交易日
+        id: check_date
+        run: |
+          python -c "
+          import os
+          from datetime import date
+          from workalendar.asia import Taiwan
+          cal = Taiwan()
+          is_trading_day = cal.is_working_day(date.today())
+          print(f'Is trading day: {is_trading_day}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'should_run={str(is_trading_day).lower()}\n')
+          "
+
+      - name: 執行台股策略 (傳入 tw_close 參數)
+        if: steps.check_date.outputs.should_run == 'true'
+        env:
+          LINE_CHANNEL_TOKEN: ${{ secrets.LINE_CHANNEL_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: python main.py tw_close
