@@ -237,3 +237,4 @@ if __name__ == "__main__":
         report = f"⚡ 投資戰報 {tw_now.strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
         for t in target_list: report += analyze_strategy(t, vix)
         send_push(report)
+
