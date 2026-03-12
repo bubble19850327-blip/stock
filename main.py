@@ -49,7 +49,7 @@ if __name__ == "__main__":
         for t in US_TICKERS + US_MEMORY:
             report += analyze_general_stock(t, vix)
             
-        report += "\n-- 台股記憶體指標 --\n"
+        report += "\n\n\n-- 台股記憶體指標 --\n"
         # 分析台股記憶體與現貨報價
         for t, n in TW_MEMORY:
             report += analyze_memory_stock(t, n, global_spot, global_sentiment) + "\n"
