@@ -45,11 +45,9 @@ def get_realtime_nav(ticker):
 
 def get_settlement_status():
     # 計算台指期結算日 (每月第3個週三)
-    # 確保以台灣時區的「今天」為準
     tw_tz = timezone(timedelta(hours=8))
     today = datetime.now(tw_tz).date()
     cal = calendar.monthcalendar(today.year, today.month)
-    # week[2] 是星期三，若為0代表該週沒這天
     wednesdays = [week[2] for week in cal if week[2] != 0]
     settlement_day = wednesdays[2]
     settlement_date = date(today.year, today.month, settlement_day)
@@ -64,12 +62,10 @@ def get_futures_basis():
     # 抓取台指期與大盤，計算價差 (Basis)
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
-        # 抓大盤
         res_spot = requests.get('https://tw.stock.yahoo.com/quote/^TWII', headers=headers)
         soup_spot = BeautifulSoup(res_spot.text, 'html.parser')
         spot_price = float(soup_spot.find('span', class_='Fz(32px)').text.replace(',', ''))
         
-        # 抓期貨
         res_fut = requests.get('https://tw.stock.yahoo.com/quote/WTX-1.F', headers=headers)
         soup_fut = BeautifulSoup(res_fut.text, 'html.parser')
         fut_price = float(soup_fut.find('span', class_='Fz(32px)').text.replace(',', ''))
@@ -78,9 +74,29 @@ def get_futures_basis():
     except:
         return 0, 0, 0
 
+def get_tx_night():
+    # 🌟 新增：抓取台指期夜盤 (08:00 執行時即為夜盤收盤價)
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get('https://tw.stock.yahoo.com/quote/WTX-1.F', headers=headers)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        price = float(soup.find('span', class_='Fz(32px)').text.replace(',', ''))
+        
+        pct = 0.0
+        for span in soup.find_all('span'):
+            if '%' in span.text and ('+' in span.text or '-' in span.text):
+                try:
+                    pct_str = span.text.replace('(', '').replace(')', '').replace('%', '').replace('+', '')
+                    pct = float(pct_str)
+                    break
+                except: pass
+        return price, pct
+    except:
+        return 0, 0
+
 # === 策略模組 ===
 def analyze_pre_open(data):
-    # 08:00 盤前分析 (加入四大指數)
+    # 08:00 盤前分析 (加入台指夜盤與四大指數)
     tsm = data['tsm_pct']
     vix = data['vix']
     
@@ -92,9 +108,8 @@ def analyze_pre_open(data):
     if tsm < -2: advice_0050 = "✅ 掛低買進"
     elif vix > 30: advice_0050 = "💎 恐慌貪婪買"
     
-    # 格式化指數顯示函數
     def format_idx(name, price, pct):
-        icon = "🔴" if pct < 0 else "🟢"
+        icon = "🔴" if pct < 0 else "🟢" if pct > 0 else "⚪"
         return f"{icon} {name}: {price:.1f} ({pct:+.2f}%)"
     
     return (
@@ -102,7 +117,8 @@ def analyze_pre_open(data):
         f"氣氛: {sentiment}\n"
         f"TSM: {tsm:+.2f}%\n"
         f"VIX: {vix:.1f}\n"
-        f"--- 美股四大指數 ---\n"
+        f"--- 夜盤與美股 ---\n"
+        f"{format_idx('台指夜', data['tx_night_price'], data['tx_night_pct'])}\n"
         f"{format_idx('道瓊', data['dji_price'], data['dji_pct'])}\n"
         f"{format_idx('標普', data['spx_price'], data['spx_pct'])}\n"
         f"{format_idx('那指', data['ndx_price'], data['ndx_pct'])}\n"
@@ -118,9 +134,8 @@ def analyze_strategy(ticker, current_vix):
         if len(df) < 120: return ""
         price = df['Close'].iloc[-1]
         
-        # 計算均線與昨日月線 (用於判斷斜率)
         ma20 = df['Close'].rolling(20).mean().iloc[-1]
-        ma20_prev = df['Close'].rolling(20).mean().iloc[-2] # 昨日月線
+        ma20_prev = df['Close'].rolling(20).mean().iloc[-2]
         ma60 = df['Close'].rolling(60).mean().iloc[-1]
         ma120 = df['Close'].rolling(120).mean().iloc[-1]
         bias = ((price - ma60) / ma60) * 100
@@ -131,14 +146,11 @@ def analyze_strategy(ticker, current_vix):
         is_us = ticker in US_TICKERS
         title_icon = "🇺🇸" if is_us else "🇹🇼"
         
-        # 1. 結算日與價差濾網
         settlement_msg, days_to_settle = get_settlement_status()
         spot, fut, basis = get_futures_basis()
         
-        # 僅在台股結算日當天顯示
         basis_msg = f" \n 台指期結算日價差: {basis:.0f}" if "TW" in ticker and days_to_settle == 0 else ""
         
-        # 2. 溢價檢查 (台股 ETF)
         premium_msg = ""
         is_premium_high = False
         if not is_us and "0050" not in ticker:
@@ -149,12 +161,10 @@ def analyze_strategy(ticker, current_vix):
                 if premium > 3.0: is_premium_high = True; premium_msg += " 🔥太貴"
                 elif premium < -1.0: premium_msg += " 💧折價"
 
-        # 3. 策略核心
         action = "信仰續抱"
         icon = "💎"
         reason = f"趨勢行進 (ADX={adx:.1f})"
 
-        # A. 優先檢查：結算日風險 (僅針對台股正二)
         if "00631L" in ticker or "00675L" in ticker:
             if days_to_settle == 0:
                 settlement_msg += f" (🔥本日結算)"
@@ -164,11 +174,9 @@ def analyze_strategy(ticker, current_vix):
             elif days_to_settle == 1 and bias > 20:
                 action, icon, reason = "🚀 提前停利", "💰", "明日結算+乖離大，落袋為安"
 
-        # B. 優先檢查：溢價套利 (送分題)
         if is_premium_high:
             action, icon, reason = "💎 溢價套利 (賣)", "💸", "溢價>3% 價格虛高"
 
-        # C. 存股策略 (0050)
         elif ticker == '0050.TW':
             k_val = df.ta.stoch(k=9, d=3)['STOCHk_9_3_3'].iloc[-1]
             if current_vix > 30: action, icon, reason = "💎 恐慌貪婪買", "🔥🔥", f"VIX飆高 {current_vix:.1f}"
@@ -176,21 +184,18 @@ def analyze_strategy(ticker, current_vix):
             elif price < df['Open'].iloc[-1]: action, icon, reason = "✅ 收綠買進", "🌱", "日常累積股數"
             else: action, icon, reason = "觀望", "👀", "暫不追高"
 
-        # D. 波段策略 (槓桿/科技)
-        elif "TW" in ticker or is_us: # 排除掉 0050 後
+        elif "TW" in ticker or is_us:
             if bias > (30 if is_us else 25): 
                 action, icon, reason = "🚀 網格停利", "💰", f"乖離過熱 {bias:.1f}%"
             elif price < ma120 and current_vix > 30: 
                 action, icon, reason = "💎 恐慌鑽石買", "🔥🔥🔥", "半年線+VIX爆表"
             elif price < ma60: 
                 action, icon, reason = "✨ 試單加碼", "🟢", "季線價值浮現"
-            # 🌟 強勢回檔買點：跌破月線但具備多頭趨勢濾網
             elif price < ma20 and adx > 25 and ma20 > ma20_prev: 
                 action, icon, reason = "🎯 強勢回檔買", "🟡", "破月線但趨勢強(ADX>25)且月線上揚"
             elif adx < 20: 
                 action, icon, reason = "⚠️ 盤整忍耐", "🧘", "無趨勢避耗損"
 
-        # 整理報告
         settle_info = f"\n🗓️ {settlement_msg}" if settlement_msg else ""
         return f"\n\n📊 【{title_icon} {ticker}】{settle_info}{basis_msg}\n現價: {price:.2f} (乖離 {bias:.1f}%)\n{premium_msg}💡 {icon} {action}\n📝 {reason}"
 
@@ -201,16 +206,17 @@ if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"
     print(f"🚀 啟動模式: {mode}")
 
-    # 建立台灣時區 (UTC+8)
     tw_tz = timezone(timedelta(hours=8))
     tw_now = datetime.now(tw_tz)
 
     if mode == "pre_open":
-        # 加入四大指數代號：道瓊(^DJI), 標普(^GSPC), 那指(^IXIC), 費半(^SOX)
         tickers = ['TSM', '^SOX', '^IXIC', '^DJI', '^GSPC', '^VIX']
         data = yf.download(tickers, period='5d', progress=False)['Close']
         changes = data.pct_change().iloc[-1] * 100
         last_close = data.iloc[-1]
+        
+        # 抓取台指期夜盤
+        tx_night_price, tx_night_pct = get_tx_night()
         
         info = {
             'tsm_pct': changes['TSM'],
@@ -218,17 +224,16 @@ if __name__ == "__main__":
             'dji_price': last_close['^DJI'], 'dji_pct': changes['^DJI'],
             'spx_price': last_close['^GSPC'], 'spx_pct': changes['^GSPC'],
             'ndx_price': last_close['^IXIC'], 'ndx_pct': changes['^IXIC'],
-            'sox_price': last_close['^SOX'], 'sox_pct': changes['^SOX']
+            'sox_price': last_close['^SOX'], 'sox_pct': changes['^SOX'],
+            'tx_night_price': tx_night_price, 'tx_night_pct': tx_night_pct
         }
         
-        # 加上台灣時間戳記
         report = f"📅 {tw_now.strftime('%Y-%m-%d %H:%M')}\n" + analyze_pre_open(info)
         send_push(report)
     else:
         target_list = US_TICKERS if mode == "us" else TW_TICKERS if mode == "tw" else TW_TICKERS + US_TICKERS
         vix = get_vix()
         
-        # 將推播時間強制設定為台灣時間
         report = f"⚡ 投資戰報 {tw_now.strftime('%m-%d %H:%M')}\n🌎 VIX: {vix:.2f}"
         for t in target_list: report += analyze_strategy(t, vix)
         send_push(report)
